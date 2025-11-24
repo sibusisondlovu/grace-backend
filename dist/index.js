@@ -50,13 +50,13 @@ app.use('/api', apiRoutes);
 // Serve static files from the React frontend app
 const clientBuildPath = join(__dirname, 'client');
 app.use(express.static(clientBuildPath));
-// Anything that doesn't match the above, send back index.html
-app.get('*', (req, res) => {
-    res.sendFile(join(clientBuildPath, 'index.html'));
-});
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
+});
+// Anything that doesn't match the above, send back index.html
+app.get('*', (req, res) => {
+    res.sendFile(join(clientBuildPath, 'index.html'));
 });
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
