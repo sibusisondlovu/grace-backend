@@ -13,5 +13,11 @@ const pool = new Pool({
   ssl: false // Disable SSL
 });
 
+// Prevent unhandled errors from crashing the app
+pool.on('error', (err) => {
+  console.error('Unexpected database error:', err);
+});
+
 export default pool;
+
 
