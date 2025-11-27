@@ -10,7 +10,7 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: false // Disable SSL
+  ssl: { rejectUnauthorized: false }
 });
 
 // Prevent unhandled errors from crashing the app
