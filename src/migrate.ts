@@ -1,6 +1,10 @@
 import pool from './config/database.js';
-import { readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 async function runMigrations() {
   try {
@@ -11,12 +15,13 @@ async function runMigrations() {
       join(__dirname, '../../database/init.sql'),
       'utf-8'
     );
-
+    
     await pool.query(initSql);
     console.log('✓ Initial schema created');
 
     // Read all migration files from supabase/migrations
     const migrationsDir = join(__dirname, '../../supabase/migrations');
+    const { readdirSync } = await import('fs');
     const migrationFiles = readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort();
@@ -29,7 +34,7 @@ async function runMigrations() {
           join(migrationsDir, file),
           'utf-8'
         );
-
+        
         // Replace auth.users references with users
         const adaptedSql = migrationSql
           .replace(/auth\.users/g, 'users')
@@ -46,9 +51,9 @@ async function runMigrations() {
         console.log(`✓ Applied migration: ${file}`);
       } catch (error: any) {
         // Some migrations might fail due to missing tables, that's okay
-        if (error.message.includes('already exists') ||
-          error.message.includes('does not exist') ||
-          error.message.includes('duplicate')) {
+        if (error.message.includes('already exists') || 
+            error.message.includes('does not exist') ||
+            error.message.includes('duplicate')) {
           console.log(`⚠ Skipped migration ${file}: ${error.message.split('\n')[0]}`);
         } else {
           console.error(`✗ Error in migration ${file}:`, error.message);

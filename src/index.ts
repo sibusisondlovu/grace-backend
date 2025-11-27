@@ -1,4 +1,3 @@
-console.log('Starting GRACE Backend Server...');
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -44,10 +43,20 @@ app.get('/', (req, res) => {
   });
 });
 
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 // Routes
 app.use('/auth', authRoutes);
 app.use('/functions/v1', functionRoutes);
 app.use('/api', apiRoutes);
+
+// Serve static files from the React frontend app
+const clientBuildPath = join(__dirname, 'client');
+app.use(express.static(clientBuildPath));
 
 
 
@@ -56,7 +65,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-
+// Anything that doesn't match the above, send back index.html
+app.get('*', (req, res) => {
+  res.sendFile(join(clientBuildPath, 'index.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
