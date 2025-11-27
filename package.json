@@ -4,6 +4,9 @@
   "description": "GRACE backend server with PostgreSQL",
   "main": "dist/index.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
