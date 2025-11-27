@@ -52,7 +52,7 @@ jobs:
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'grace-backend' # Replace with your app name if different
+          app-name: 'grace-backend-app-prod'
           slot-name: 'production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AEB795B0D1FA48399EC9EB763C2CB3E5 }}
           package: .
