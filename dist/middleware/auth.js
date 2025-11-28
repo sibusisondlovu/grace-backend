@@ -1,10 +1,16 @@
-import jwt from 'jsonwebtoken';
-import jwksRsa from 'jwks-rsa';
-import pool from '../config/database.js';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.authenticate = void 0;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const jwks_rsa_1 = __importDefault(require("jwks-rsa"));
+const database_js_1 = __importDefault(require("../config/database.js"));
 // Microsoft Entra ID configuration
 const TENANT_ID = process.env.AZURE_TENANT_ID || 'common';
 const CLIENT_ID = process.env.AZURE_CLIENT_ID;
-const client = jwksRsa({
+const client = (0, jwks_rsa_1.default)({
     jwksUri: `https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`
 });
 function getKey(header, callback) {
@@ -17,7 +23,7 @@ function getKey(header, callback) {
         callback(null, signingKey);
     });
 }
-export const authenticate = async (req, res, next) => {
+const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -27,9 +33,9 @@ export const authenticate = async (req, res, next) => {
         const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
         // 1. Try to verify as Local JWT
         try {
-            const decoded = jwt.verify(token, JWT_SECRET);
+            const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
             // Verify user exists in database
-            const result = await pool.query('SELECT id, email FROM users WHERE id = $1', [decoded.userId]);
+            const result = await database_js_1.default.query('SELECT id, email FROM users WHERE id = $1', [decoded.userId]);
             if (result.rows.length > 0) {
                 req.user = {
                     id: result.rows[0].id,
@@ -43,7 +49,7 @@ export const authenticate = async (req, res, next) => {
             // Not a valid local token, proceed to Entra ID verification
         }
         // 2. Verify as Entra ID Token
-        jwt.verify(token, getKey, {
+        jsonwebtoken_1.default.verify(token, getKey, {
             audience: CLIENT_ID, // Verify the token is intended for this app
             issuer: `https://login.microsoftonline.com/${TENANT_ID}/v2.0`
         }, async (err, decoded) => {
@@ -62,7 +68,7 @@ export const authenticate = async (req, res, next) => {
                 // Check if user exists in our database
                 // We might need to map Azure OID to our internal ID or just use email
                 // For now, let's look up by email
-                const result = await pool.query('SELECT id, email FROM users WHERE email = $1', [email]);
+                const result = await database_js_1.default.query('SELECT id, email FROM users WHERE email = $1', [email]);
                 if (result.rows.length === 0) {
                     // Optional: Auto-provision user if they don't exist
                     // For now, return error
@@ -84,4 +90,5 @@ export const authenticate = async (req, res, next) => {
         return res.status(500).json({ error: 'Authentication error' });
     }
 };
+exports.authenticate = authenticate;
 //# sourceMappingURL=auth.js.map

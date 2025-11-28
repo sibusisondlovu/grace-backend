@@ -1,11 +1,49 @@
-import express from 'express';
-import { authenticate } from '../middleware/auth.js';
-import { loadUserContext, getOrganizationFilter, getCommitteeFilter } from '../middleware/authorization.js';
-import pool from '../config/database.js';
-const router = express.Router();
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const auth_js_1 = require("../middleware/auth.js");
+const authorization_js_1 = require("../middleware/authorization.js");
+const database_js_1 = __importDefault(require("../config/database.js"));
+const router = express_1.default.Router();
 // Apply authentication and user context loading to all routes
-router.use(authenticate);
-router.use(loadUserContext);
+router.use(auth_js_1.authenticate);
+router.use(authorization_js_1.loadUserContext);
 // SQL injection protection helper
 function sanitizeTableName(table) {
     // Only allow alphanumeric and underscore, must start with letter or underscore
@@ -80,7 +118,7 @@ router.get('/:table', async (req, res) => {
             if (countConditions.length > 0) {
                 countQuery += ' WHERE ' + countConditions.join(' AND ');
             }
-            const countResult = await pool.query(countQuery, countValues);
+            const countResult = await database_js_1.default.query(countQuery, countValues);
             return res.json({ count: parseInt(countResult.rows[0].count) });
         }
         let query = `SELECT * FROM ${safeTable}`;
@@ -145,10 +183,10 @@ router.get('/:table', async (req, res) => {
             }
         });
         // Apply organization-level data segregation
-        const orgFilter = getOrganizationFilter(req.userContext);
+        const orgFilter = (0, authorization_js_1.getOrganizationFilter)(req.userContext);
         if (orgFilter && safeTable !== 'organizations') {
             // Check if table has organization_id column
-            const hasOrgColumn = await pool.query(`SELECT column_name FROM information_schema.columns 
+            const hasOrgColumn = await database_js_1.default.query(`SELECT column_name FROM information_schema.columns 
          WHERE table_name = $1 AND column_name = 'organization_id'`, [safeTable]);
             if (hasOrgColumn.rows.length > 0) {
                 conditions.push(`organization_id = $${paramIndex}`);
@@ -158,7 +196,7 @@ router.get('/:table', async (req, res) => {
         }
         // Apply committee-level access control for committee-related tables
         if (['meetings', 'agenda_items', 'action_items', 'committee_members'].includes(safeTable)) {
-            const committeeFilter = getCommitteeFilter(req.userContext);
+            const committeeFilter = (0, authorization_js_1.getCommitteeFilter)(req.userContext);
             if (committeeFilter && committeeFilter.length > 0) {
                 const placeholders = committeeFilter.map((_, i) => `$${paramIndex + i}`).join(', ');
                 conditions.push(`committee_id IN (${placeholders})`);
@@ -190,7 +228,7 @@ router.get('/:table', async (req, res) => {
             query += ` LIMIT $${paramIndex}`;
             values.push(parseInt(queryParams.limit));
         }
-        const result = await pool.query(query, values);
+        const result = await database_js_1.default.query(query, values);
         const data = queryParams.single === 'true' && result.rows.length > 0 ? result.rows[0] : result.rows;
         res.json(data);
     }
@@ -210,10 +248,10 @@ router.post('/:table', async (req, res) => {
         const results = [];
         for (const item of items) {
             // Enforce organization_id for multi-tenant tables
-            const orgFilter = getOrganizationFilter(req.userContext);
+            const orgFilter = (0, authorization_js_1.getOrganizationFilter)(req.userContext);
             if (orgFilter && safeTable !== 'organizations' && !item.organization_id) {
                 // Check if table has organization_id column
-                const hasOrgColumn = await pool.query(`SELECT column_name FROM information_schema.columns 
+                const hasOrgColumn = await database_js_1.default.query(`SELECT column_name FROM information_schema.columns 
            WHERE table_name = $1 AND column_name = 'organization_id'`, [safeTable]);
                 if (hasOrgColumn.rows.length > 0) {
                     item.organization_id = orgFilter;
@@ -221,7 +259,7 @@ router.post('/:table', async (req, res) => {
             }
             // Verify committee access for committee-related inserts
             if (['meetings', 'agenda_items', 'action_items', 'committee_members'].includes(safeTable) && item.committee_id) {
-                const { hasCommitteeAccess } = await import('../middleware/authorization.js');
+                const { hasCommitteeAccess } = await Promise.resolve().then(() => __importStar(require('../middleware/authorization.js')));
                 const hasAccess = await hasCommitteeAccess(item.committee_id, req.userContext.id, req.userContext);
                 if (!hasAccess) {
                     return res.status(403).json({
@@ -244,7 +282,7 @@ router.post('/:table', async (req, res) => {
         VALUES (${placeholders})
         RETURNING *
       `;
-            const result = await pool.query(query, values);
+            const result = await database_js_1.default.query(query, values);
             results.push(result.rows[0]);
         }
         res.json(isArray ? results : results[0]);
@@ -278,9 +316,9 @@ router.patch('/:table', async (req, res) => {
             return res.status(400).json({ error: 'Update requires WHERE conditions' });
         }
         // Apply organization filter for multi-tenant tables
-        const orgFilter = getOrganizationFilter(req.userContext);
+        const orgFilter = (0, authorization_js_1.getOrganizationFilter)(req.userContext);
         if (orgFilter && safeTable !== 'organizations') {
-            const hasOrgColumn = await pool.query(`SELECT column_name FROM information_schema.columns 
+            const hasOrgColumn = await database_js_1.default.query(`SELECT column_name FROM information_schema.columns 
          WHERE table_name = $1 AND column_name = 'organization_id'`, [safeTable]);
             if (hasOrgColumn.rows.length > 0) {
                 conditions.push(`organization_id = $${paramIndex}`);
@@ -300,7 +338,7 @@ router.patch('/:table', async (req, res) => {
       WHERE ${conditions.join(' AND ')}
       RETURNING *
     `;
-        const result = await pool.query(query, updateValues);
+        const result = await database_js_1.default.query(query, updateValues);
         // Verify user has access to updated records
         if (result.rows.length > 0 && orgFilter) {
             const updatedOrgId = result.rows[0].organization_id;
@@ -336,9 +374,9 @@ router.delete('/:table', async (req, res) => {
             return res.status(400).json({ error: 'Delete requires WHERE conditions' });
         }
         // Apply organization filter for multi-tenant tables
-        const orgFilter = getOrganizationFilter(req.userContext);
+        const orgFilter = (0, authorization_js_1.getOrganizationFilter)(req.userContext);
         if (orgFilter && safeTable !== 'organizations') {
-            const hasOrgColumn = await pool.query(`SELECT column_name FROM information_schema.columns 
+            const hasOrgColumn = await database_js_1.default.query(`SELECT column_name FROM information_schema.columns 
          WHERE table_name = $1 AND column_name = 'organization_id'`, [safeTable]);
             if (hasOrgColumn.rows.length > 0) {
                 conditions.push(`organization_id = $${paramIndex}`);
@@ -354,7 +392,7 @@ router.delete('/:table', async (req, res) => {
         }
         // First check what will be deleted to verify access
         const checkQuery = `SELECT * FROM ${safeTable} WHERE ${conditions.join(' AND ')}`;
-        const checkResult = await pool.query(checkQuery, values);
+        const checkResult = await database_js_1.default.query(checkQuery, values);
         // Verify user has access to records being deleted
         if (checkResult.rows.length > 0 && orgFilter) {
             for (const row of checkResult.rows) {
@@ -364,7 +402,7 @@ router.delete('/:table', async (req, res) => {
             }
         }
         const query = `DELETE FROM ${safeTable} WHERE ${conditions.join(' AND ')} RETURNING *`;
-        const result = await pool.query(query, values);
+        const result = await database_js_1.default.query(query, values);
         res.json(result.rows);
     }
     catch (error) {
@@ -372,5 +410,5 @@ router.delete('/:table', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=api.js.map

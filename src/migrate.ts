@@ -8,15 +8,15 @@ async function runMigrations() {
 
     // Read and execute init.sql
     const initSql = readFileSync(
-      join(__dirname, '../../database/init.sql'),
+      join(__dirname, '../database/init.sql'),
       'utf-8'
     );
 
     await pool.query(initSql);
     console.log('✓ Initial schema created');
 
-    // Read all migration files from supabase/migrations
-    const migrationsDir = join(__dirname, '../../supabase/migrations');
+    // Read all migration files from database/migrations
+    const migrationsDir = join(__dirname, '../database/migrations');
     const migrationFiles = readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort();

@@ -1,17 +1,22 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import functionRoutes from './routes/functions.js';
-import apiRoutes from './routes/api.js';
-dotenv.config();
-const app = express();
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const dotenv_1 = __importDefault(require("dotenv"));
+const auth_js_1 = __importDefault(require("./routes/auth.js"));
+const functions_js_1 = __importDefault(require("./routes/functions.js"));
+const api_js_1 = __importDefault(require("./routes/api.js"));
+dotenv_1.default.config();
+const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
 // Middleware
 const allowedOrigins = process.env.FRONTEND_URL
     ? [process.env.FRONTEND_URL]
     : ['http://localhost:5173', 'http://localhost:8080'];
-app.use(cors({
+app.use((0, cors_1.default)({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin)
@@ -25,7 +30,7 @@ app.use(cors({
     },
     credentials: true,
 }));
-app.use(express.json());
+app.use(express_1.default.json());
 // Root route
 app.get('/', (req, res) => {
     res.json({
@@ -39,24 +44,13 @@ app.get('/', (req, res) => {
         }
     });
 });
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 // Routes
-app.use('/auth', authRoutes);
-app.use('/functions/v1', functionRoutes);
-app.use('/api', apiRoutes);
-// Serve static files from the React frontend app
-const clientBuildPath = join(__dirname, 'client');
-app.use(express.static(clientBuildPath));
+app.use('/auth', auth_js_1.default);
+app.use('/functions/v1', functions_js_1.default);
+app.use('/api', api_js_1.default);
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
-});
-// Anything that doesn't match the above, send back index.html
-app.get('*', (req, res) => {
-    res.sendFile(join(clientBuildPath, 'index.html'));
 });
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

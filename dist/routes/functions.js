@@ -1,11 +1,16 @@
-import express from 'express';
-import { authenticate } from '../middleware/auth.js';
-import { loadUserContext, getOrganizationFilter } from '../middleware/authorization.js';
-import pool from '../config/database.js';
-const router = express.Router();
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const auth_js_1 = require("../middleware/auth.js");
+const authorization_js_1 = require("../middleware/authorization.js");
+const database_js_1 = __importDefault(require("../config/database.js"));
+const router = express_1.default.Router();
 // Apply authentication and user context to all function routes
-router.use(authenticate);
-router.use(loadUserContext);
+router.use(auth_js_1.authenticate);
+router.use(authorization_js_1.loadUserContext);
 // AI Assistant endpoint
 router.post('/ai-assistant', async (req, res) => {
     try {
@@ -15,7 +20,7 @@ router.post('/ai-assistant', async (req, res) => {
             return res.status(500).json({ error: 'LOVABLE_API_KEY not configured' });
         }
         // Get user's committees and roles
-        const userRolesResult = await pool.query(`SELECT role, committee_id FROM user_roles WHERE user_id = $1`, [req.user.id]);
+        const userRolesResult = await database_js_1.default.query(`SELECT role, committee_id FROM user_roles WHERE user_id = $1`, [req.user.id]);
         const roles = userRolesResult.rows.map(r => r.role);
         const committeeIds = userRolesResult.rows
             .filter(r => r.committee_id)
@@ -25,7 +30,7 @@ router.post('/ai-assistant', async (req, res) => {
         let context = "";
         // Search for relevant documents
         if (lastMessage.toLowerCase().includes('document') || lastMessage.toLowerCase().includes('report')) {
-            const documentsResult = await pool.query(`SELECT md.id, md.title, md.document_type, md.created_at,
+            const documentsResult = await database_js_1.default.query(`SELECT md.id, md.title, md.document_type, md.created_at,
                 m.title as meeting_title, m.meeting_date, m.committee_id,
                 c.name as committee_name
          FROM meeting_documents md
@@ -40,7 +45,7 @@ router.post('/ai-assistant', async (req, res) => {
         }
         // Search for action items
         if (lastMessage.toLowerCase().includes('action') || lastMessage.toLowerCase().includes('task')) {
-            const actionsResult = await pool.query(`SELECT ai.id, ai.title, ai.status, ai.priority, ai.due_date, c.name as committee_name
+            const actionsResult = await database_js_1.default.query(`SELECT ai.id, ai.title, ai.status, ai.priority, ai.due_date, c.name as committee_name
          FROM action_items ai
          LEFT JOIN committees c ON ai.committee_id = c.id
          WHERE ai.committee_id = ANY($1::uuid[])
@@ -52,7 +57,7 @@ router.post('/ai-assistant', async (req, res) => {
         }
         // Search for meetings
         if (lastMessage.toLowerCase().includes('meeting') || lastMessage.toLowerCase().includes('agenda')) {
-            const meetingsResult = await pool.query(`SELECT m.id, m.title, m.meeting_date, m.status, c.name as committee_name
+            const meetingsResult = await database_js_1.default.query(`SELECT m.id, m.title, m.meeting_date, m.status, c.name as committee_name
          FROM meetings m
          JOIN committees c ON m.committee_id = c.id
          WHERE m.committee_id = ANY($1::uuid[])
@@ -64,7 +69,7 @@ router.post('/ai-assistant', async (req, res) => {
         }
         // Search for resolutions/motions
         if (lastMessage.toLowerCase().includes('resolution') || lastMessage.toLowerCase().includes('motion')) {
-            const motionsResult = await pool.query(`SELECT m.id, m.title, m.motion_type, m.status, m.outcome, m.notice_date, c.name as committee_name
+            const motionsResult = await database_js_1.default.query(`SELECT m.id, m.title, m.motion_type, m.status, m.outcome, m.notice_date, c.name as committee_name
          FROM motions m
          LEFT JOIN committees c ON m.committee_id = c.id
          WHERE m.committee_id = ANY($1::uuid[])
@@ -143,7 +148,7 @@ router.post('/generate-minutes', async (req, res) => {
             return res.status(400).json({ error: 'meetingId is required' });
         }
         // Fetch meeting details with access control
-        const orgFilter = getOrganizationFilter(req.userContext);
+        const orgFilter = (0, authorization_js_1.getOrganizationFilter)(req.userContext);
         let meetingQuery = `
       SELECT m.id, m.title, m.meeting_date, m.venue, m.meeting_type, m.status,
              c.name as committee_name, c.type as committee_type, m.committee_id, m.organization_id
@@ -167,23 +172,23 @@ router.post('/generate-minutes', async (req, res) => {
                 return res.status(403).json({ error: 'Access denied to this meeting' });
             }
         }
-        const meetingResult = await pool.query(meetingQuery, meetingParams);
+        const meetingResult = await database_js_1.default.query(meetingQuery, meetingParams);
         if (meetingResult.rows.length === 0) {
             return res.status(404).json({ error: 'Meeting not found or access denied' });
         }
         const meeting = meetingResult.rows[0];
         // Fetch agenda items
-        const agendaResult = await pool.query(`SELECT id, item_number, title, description, item_type, status, order_index, requires_vote, estimated_duration
+        const agendaResult = await database_js_1.default.query(`SELECT id, item_number, title, description, item_type, status, order_index, requires_vote, estimated_duration
        FROM agenda_items
        WHERE meeting_id = $1
        ORDER BY order_index ASC`, [meetingId]);
         // Fetch decisions
-        const decisionsResult = await pool.query(`SELECT id, decision_number, decision_type, decision_text, owner_department, due_date, priority, status
+        const decisionsResult = await database_js_1.default.query(`SELECT id, decision_number, decision_type, decision_text, owner_department, due_date, priority, status
        FROM decisions_register
        WHERE meeting_id = $1
        ORDER BY created_at ASC`, [meetingId]);
         // Fetch attendance
-        const attendanceResult = await pool.query(`SELECT ma.id, ma.attendance_status, p.first_name, p.last_name
+        const attendanceResult = await database_js_1.default.query(`SELECT ma.id, ma.attendance_status, p.first_name, p.last_name
        FROM meeting_attendance ma
        JOIN profiles p ON ma.user_id = p.user_id
        WHERE ma.meeting_id = $1`, [meetingId]);
@@ -282,7 +287,7 @@ router.post('/teams-notify', async (req, res) => {
     try {
         const { organizationId, title, message, notificationType, metadata, themeColor } = req.body;
         // Get organization's Teams webhook URL
-        const orgResult = await pool.query('SELECT teams_webhook_url FROM organizations WHERE id = $1', [organizationId]);
+        const orgResult = await database_js_1.default.query('SELECT teams_webhook_url FROM organizations WHERE id = $1', [organizationId]);
         if (orgResult.rows.length === 0) {
             return res.status(404).json({ error: 'Organization not found' });
         }
@@ -318,7 +323,7 @@ router.post('/teams-notify', async (req, res) => {
         const success = teamsResponse.ok;
         const errorMessage = success ? null : await teamsResponse.text();
         // Log notification to database
-        await pool.query(`INSERT INTO teams_notifications (organization_id, notification_type, title, message, success, error_message, metadata)
+        await database_js_1.default.query(`INSERT INTO teams_notifications (organization_id, notification_type, title, message, success, error_message, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`, [organizationId, notificationType, title, message, success, errorMessage, JSON.stringify(metadata || {})]);
         if (!success) {
             return res.status(500).json({ error: `Teams webhook error: ${errorMessage}` });
@@ -341,7 +346,7 @@ router.post('/send-notification-email', async (req, res) => {
         // Determine recipient email
         let emailTo = recipientEmail;
         if (!emailTo && recipientId) {
-            const profileResult = await pool.query('SELECT email FROM profiles WHERE user_id = $1', [recipientId]);
+            const profileResult = await database_js_1.default.query('SELECT email FROM profiles WHERE user_id = $1', [recipientId]);
             if (profileResult.rows.length === 0 || !profileResult.rows[0].email) {
                 return res.status(404).json({ error: 'Could not find recipient email' });
             }
@@ -351,7 +356,7 @@ router.post('/send-notification-email', async (req, res) => {
             return res.status(400).json({ error: 'No recipient email provided' });
         }
         // Log the notification in database (email sending removed)
-        await pool.query(`INSERT INTO email_notifications (organization_id, recipient_email, recipient_id, subject, notification_type, metadata, status, sent_at)
+        await database_js_1.default.query(`INSERT INTO email_notifications (organization_id, recipient_email, recipient_id, subject, notification_type, metadata, status, sent_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
             organizationId,
             emailTo,
@@ -376,7 +381,7 @@ router.post('/send-notification-email', async (req, res) => {
 router.get('/health-check', async (req, res) => {
     try {
         // Check database connectivity
-        await pool.query('SELECT 1');
+        await database_js_1.default.query('SELECT 1');
         res.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
@@ -400,5 +405,5 @@ router.get('/health-check', async (req, res) => {
         });
     }
 });
-export default router;
+exports.default = router;
 //# sourceMappingURL=functions.js.map

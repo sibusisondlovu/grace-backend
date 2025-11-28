@@ -1,26 +1,27 @@
-import pool from './config/database.js';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const database_js_1 = __importDefault(require("./config/database.js"));
+const fs_1 = require("fs");
+const path_1 = require("path");
 async function runMigrations() {
     try {
         console.log('Starting database migrations...');
         // Read and execute init.sql
-        const initSql = readFileSync(join(__dirname, '../../database/init.sql'), 'utf-8');
-        await pool.query(initSql);
+        const initSql = (0, fs_1.readFileSync)((0, path_1.join)(__dirname, '../database/init.sql'), 'utf-8');
+        await database_js_1.default.query(initSql);
         console.log('✓ Initial schema created');
-        // Read all migration files from supabase/migrations
-        const migrationsDir = join(__dirname, '../../supabase/migrations');
-        const { readdirSync } = await import('fs');
-        const migrationFiles = readdirSync(migrationsDir)
+        // Read all migration files from database/migrations
+        const migrationsDir = (0, path_1.join)(__dirname, '../database/migrations');
+        const migrationFiles = (0, fs_1.readdirSync)(migrationsDir)
             .filter(f => f.endsWith('.sql'))
             .sort();
         console.log(`Found ${migrationFiles.length} migration files`);
         for (const file of migrationFiles) {
             try {
-                const migrationSql = readFileSync(join(migrationsDir, file), 'utf-8');
+                const migrationSql = (0, fs_1.readFileSync)((0, path_1.join)(migrationsDir, file), 'utf-8');
                 // Replace auth.users references with users
                 const adaptedSql = migrationSql
                     .replace(/auth\.users/g, 'users')
@@ -32,7 +33,7 @@ async function runMigrations() {
                     // Remove auth trigger (we'll handle profile creation in app)
                     .replace(/CREATE.*TRIGGER.*on_auth_user_created.*;/gi, '')
                     .replace(/CREATE.*FUNCTION.*handle_new_user.*;/gi, '');
-                await pool.query(adaptedSql);
+                await database_js_1.default.query(adaptedSql);
                 console.log(`✓ Applied migration: ${file}`);
             }
             catch (error) {
