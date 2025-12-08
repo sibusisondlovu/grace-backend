@@ -9,6 +9,61 @@ const router = express.Router();
 router.use(authenticate);
 router.use(loadUserContext);
 
+// Onboarding Endpoint
+router.post('/complete-user-onboarding', async (req, res) => {
+  try {
+    const {
+      _user_id,
+      _organization_name,
+      _organization_domain,
+      _first_name,
+      _last_name
+    } = req.body;
+
+    if (!_user_id || !_organization_name || !_first_name || !_last_name) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // 1. Create Organization
+    // Auto-generate slug from name if not provided (simple version)
+    const slug = _organization_name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    const orgResult = await pool.query(
+      `INSERT INTO organizations (name, slug, domain, subscription_status)
+       VALUES ($1, $2, $3, 'active')
+       ON CONFLICT (slug) DO UPDATE SET domain = $3
+       RETURNING id`,
+      [_organization_name, slug, _organization_domain]
+    );
+
+    const organizationId = orgResult.rows[0].id;
+
+    // 2. Update Profile
+    await pool.query(
+      `UPDATE profiles 
+       SET first_name = $1, 
+           last_name = $2, 
+           organization_id = $3
+       WHERE user_id = $4`,
+      [_first_name, _last_name, organizationId, _user_id]
+    );
+
+    // 3. Assign Admin Role
+    await pool.query(
+      `INSERT INTO user_roles (user_id, role)
+       VALUES ($1, 'admin')
+       ON CONFLICT (user_id, role, committee_id) DO NOTHING`,
+      [_user_id]
+    );
+
+    res.json({ success: true, organization_id: organizationId });
+
+  } catch (error: any) {
+    console.error('Onboarding error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // AI Assistant endpoint
 router.post('/ai-assistant', async (req, res) => {
   try {
