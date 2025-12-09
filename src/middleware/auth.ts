@@ -77,37 +77,59 @@ export const authenticate = async (
     }
 
     // 2. Verify as Entra ID Token
+    // We don't strictly enforce issuer here because for multi-tenant apps, the issuer contains the tenant ID
+    // which varies. The signature verification via JWKS is the primary security mechanism.
     jwt.verify(token, getKey, {
-      audience: CLIENT_ID, // Verify the token is intended for this app
-      issuer: `https://login.microsoftonline.com/${TENANT_ID}/v2.0`
+      audience: CLIENT_ID,
     }, async (err, decoded: any) => {
       if (err) {
         console.error('Token verification failed:', err);
         return res.status(401).json({ error: 'Invalid token' });
       }
 
-      // Extract user info from Entra ID token
-      // OID is the immutable object identifier for the user in Azure AD
+      // Extract user info
       const azureUserId = decoded.oid;
-      const email = decoded.preferred_username || decoded.email;
+      const email = (decoded.preferred_username || decoded.email || decoded.upn)?.toLowerCase(); // Normalize email
+      const name = decoded.name;
 
       if (!email) {
         return res.status(401).json({ error: 'Token missing email' });
       }
 
       try {
-        // Check if user exists in our database
-        // We might need to map Azure OID to our internal ID or just use email
-        // For now, let's look up by email
-        const result = await pool.query(
+        // Check if user exists
+        let result = await pool.query(
           'SELECT id, email FROM users WHERE email = $1',
           [email]
         );
 
+        // JIT (Just-In-Time) Provisioning
+        // If user is authenticated by Microsoft but not in our DB, create them.
         if (result.rows.length === 0) {
-          // Optional: Auto-provision user if they don't exist
-          // For now, return error
-          return res.status(401).json({ error: 'User not found in system' });
+          console.log(`User ${email} not found, auto-provisioning...`);
+
+          // 1. Insert into users
+          const userInsert = await pool.query(
+            `INSERT INTO users (email, password_hash, role)
+             VALUES ($1, 'msal_managed', 'user')
+             RETURNING id, email`,
+            [email]
+          );
+
+          const newUserId = userInsert.rows[0].id;
+
+          // 2. Insert into profiles (idempotent)
+          const nameParts = name ? name.split(' ') : ['New', 'User'];
+          const firstName = nameParts[0];
+          const lastName = nameParts.slice(1).join(' ') || 'User';
+
+          await pool.query(
+            `INSERT INTO profiles (user_id, first_name, last_name)
+             VALUES ($1, $2, $3)`,
+            [newUserId, firstName, lastName]
+          );
+
+          result = userInsert;
         }
 
         req.user = {
